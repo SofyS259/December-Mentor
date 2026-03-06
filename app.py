@@ -6,8 +6,7 @@ from datetime import datetime
 
 # --- НАСТРОЙКИ ---
 # Ссылка на ваш Google Script (из шага с Apps Script)
-GOOGLE_SCRIPT_URL = "AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV
-"
+GOOGLE_SCRIPT_URL = "AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV"
 
 # Список тем (книг)
 TOPICS = [

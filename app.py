@@ -1,25 +1,3 @@
-import os
-import sys
-
-# Принудительная настройка порта для Railway
-if "PORT" in os.environ:
-    # Если переменная PORT есть (как на Railway), используем её
-    port = int(os.environ["PORT"])
-    # Перезапускаем скрипт с правильными аргументами, если он запущен неправильно
-    if len(sys.argv) == 1 or not any("--server.port" in arg for arg in sys.argv):
-        sys.argv = [
-            "streamlit",
-            "run",
-            __file__,
-            "--server.port", str(port),
-            "--server.address", "0.0.0.0",
-            "--server.headless", "true",
-            "--browser.gatherUsageStats", "false"
-        ]
-        from streamlit.web import cli as stcli
-        stcli.main()
-        sys.exit()
-        
 import streamlit as st
 import requests
 import json

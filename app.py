@@ -8,7 +8,7 @@ from datetime import datetime
 # --- НАСТРОЙКИ ---
 # ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT (из шага с Apps Script)
 # Если оставите как есть, запись в таблицу не сработает!
-GOOGLE_SCRIPT_URL = "AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV"
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV/exec"
 
 # Список тем (книг)
 TOPICS = [

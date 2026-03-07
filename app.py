@@ -2,10 +2,11 @@ import streamlit as st
 import requests
 import os
 import base64
+import re
 
 # --- НАСТРОЙКИ ---
 # ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT (обязательно с https:// и /exec)
-GOOGLE_SCRIPT_URL = "ВАША_ССЫЛКА_НА_GOOGLE_SCRIPT"
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV/exec"
 
 TOPICS = [
     "Преступление и наказание",
@@ -20,7 +21,7 @@ TOPICS = [
     "Тарас Бульба"
 ]
 
-QUESTIONS_PER_TOPIC = 5
+QUESTIONS_PER_TOPIC = 5  # Нужно 5 верных ответов для перехода
 
 GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID")
 GIGACHAT_CLIENT_SECRET = os.getenv("GIGACHAT_CLIENT_SECRET")
@@ -56,54 +57,58 @@ def get_gigachat_token():
         st.error(f"Ошибка соединения: {e}")
         return None
 
-def ask_gigachat(token, user_message, current_topic, question_number):
+def ask_gigachat(token, user_message, current_topic, current_question_num, is_hint_mode=False):
     url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}"
     }
     
-    # === ГЛАВНЫЙ ПРОМПТ ЧАЦКОГО ===
     CHATSKY_PERSONA = """
-    Ты — Александр Андреевич Чацкий, герой комедии А.С. Грибоедова «Горе от ума».
-    ТВОЯ РОЛЬ: Строгий, пылкий, остроумный учитель литературы, готовящий учеников к Декабрьскому сочинению.
+    Ты — Александр Андреевич Чацкий из «Горя от ума». Ты строгий, но справедливый учитель литературы.
+    Твоя цель: провести ученика через серию из 5 вопросов по теме.
     
-    ТВОЙ СТИЛЬ РЕЧИ:
-    - Говори эмоционально, с пафосом, иногда с сарказмом и иронией («Свежо предание, а верится с трудом», «А судьи кто?», «Ба! Знакомые всё лица!»).
-    - Используй лексику начала XIX века, но понятную современному школьнику (сударь, сударыня, извольте, помилуйте).
-    - Будь нетерпим к глупости, лености и пустословию.
-    - Обращайся к ученику как к дворянину, обязанному знать классику.
-
-    ТВОИ ЗАДАЧИ:
-    1. Задавать вопросы только по русской классической литературе (список тем ограничен школьной программой).
-    2. Оценивать ответы ученика строго, но справедливо.
-    3. Если ответ верный — похвали ярко («Браво!», «Умно!», «Вот то-то же!») и задай следующий вопрос по этой же теме.
-    4. Если ответ неверный — посмейся над невежеством, укажи на ошибку и требуй ответа снова.
-    
-    СТРОГИЕ ОГРАНИЧЕНИЯ:
-    - НИКОГДА не отвечай на вопросы не по теме литературы (математика, погода, сплетни, современные мемы). 
-      Если ученик спрашивает ерунду, возмутись: «Что за новости? Какие такие пустяки? Мы здесь литературу разбираем, сударь!». Верни разговор к теме экзамена.
-    - НИКОГДА не переходи к следующей теме сам, пока не задано ровно 5 вопросов по текущей.
-    - НИКОГДА не будь слишком мягким. Ты Чацкий, а не нянька.
+    ПРАВИЛА ПОВЕДЕНИЯ:
+    1. ЗАДАВАЙ ВОПРОСЫ ПО ОДНОМУ. Никогда не перечисляй несколько вопросов сразу.
+    2. ЕСЛИ ОТВЕТ ВЕРНЫЙ: 
+       - Эмоционально похвали («Браво!», «Умно!», «Вот то-то же!»).
+       - Сразу задай СЛЕДУЮЩИЙ вопрос (номер N+1). Если это был 5-й вопрос, поздравь с завершением темы.
+    3. ЕСЛИ ОТВЕТ НЕВЕРНЫЙ или ученик говорит «не знаю»:
+       - НЕ переходи к следующему вопросу.
+       - Дай тонкую, ироничную подсказку в стиле Чацкого.
+       - Четко напиши, что нужно ответить на ЭТОТ ЖЕ вопрос снова.
+    4. СТИЛЬ: Лексика XIX века, цитаты, сарказм, пафос.
+    5. ЗАПРЕТЫ: Не отвечай на вопросы не по литературе. Не переходи к следующей теме, пока не получено 5 верных ответов.
     """
 
-    # Формирование конкретного запроса
     if user_message == "START_TOPIC":
         system_prompt = (
             CHATSKY_PERSONA + 
-            f"\n\nСЕЙЧАС: Начало экзамена. Тема: '{current_topic}'. Вопрос №1 из {QUESTIONS_PER_TOPIC}. "
-            "Задай первый вопрос по этой теме. Начни с приветствия в стиле Чацкого и сразу переходи к делу."
+            f"\n\nНАЧАЛО ЭКЗАМЕНА. Тема: '{current_topic}'. Нужно задать 5 вопросов по очереди."
+            "Задай ПЕРВЫЙ вопрос (№1). Будь краток и конкретен."
         )
         user_content = "Начни экзамен."
     else:
-        next_q = question_number + 1 if question_number < QUESTIONS_PER_TOPIC else 5
+        if is_hint_mode:
+            instruction = (
+                f"Ученик ответил неверно на вопрос №{current_question_num}. "
+                "НЕ задавай новый вопрос. Дай подсказку, намекни на ответ, используй иронию. "
+                "Затем явно попроси ответить снова на вопрос №{current_question_num}.".format(current_question_num=current_question_num)
+            )
+        else:
+            instruction = (
+                f"Ученик дал ответ на вопрос №{current_question_num}. Оцени его строго.\n"
+                "- Если ВЕРНО: Похвали и сразу задай вопрос №{next_q} (если 5-й, то заверши тему).\n"
+                "- Если НЕВЕРНО: Дай подсказку и потребуй ответить снова на вопрос №{current_q}.".format(
+                    next_q=current_question_num + 1, 
+                    current_q=current_question_num
+                )
+            )
+
         system_prompt = (
             CHATSKY_PERSONA + 
-            f"\n\nСЕЙЧАС: Тема '{current_topic}'. Текущий вопрос №{question_number} из {QUESTIONS_PER_TOPIC}. "
-            "Ответ ученика ниже. Оцени его. "
-            f"Если ответ ВЕРНЫЙ: Похвали (в стиле Чацкого). Затем задай СЛЕДУЮЩИЙ вопрос №{next_q} по этой теме. "
-            "Если это был вопрос №5: Поздравь с прохождением темы, но скажи, что впереди еще много книг. "
-            "Если ответ НЕВЕРНЫЙ или не по теме: Отчитай ученика, используй сарказм. Если вопрос не по литературе — гневно отвергни его и верни к теме '{current_topic}'. Не задавай новый вопрос, пока не получишь верный ответ на текущий."
+            f"\n\nТЕКУЩАЯ СИТУАЦИЯ: Тема '{current_topic}'. Мы работаем над вопросом №{current_question_num} из 5.\n"
+            f"{instruction}"
         )
         user_content = f"Ответ ученика: {user_message}"
 
@@ -122,9 +127,9 @@ def ask_gigachat(token, user_message, current_topic, question_number):
         if response.status_code == 200:
             return response.json()["choices"][0]["message"]["content"]
         else:
-            return f"Ошибка связи с Сбером: {response.text}"
+            return f"Ошибка связи: {response.text}"
     except Exception as e:
-        return f"Ошибка соединения: {e}"
+        return f"Ошибка: {e}"
 
 def send_to_google_sheet(nick, topic):
     if not GOOGLE_SCRIPT_URL or "https://" not in GOOGLE_SCRIPT_URL:
@@ -139,8 +144,8 @@ def send_to_google_sheet(nick, topic):
 # --- ИНТЕРФЕЙС ---
 
 st.set_page_config(page_title="Экзамен с Чацким", page_icon="🎩")
-st.title("🎩 Литературный экзамен с А.А. Чацким")
-st.markdown("*«Свежо предание, а верится с трудом...» Выдержите ли вы испытание классикой?*")
+st.title("🎩 Литературный экзамен: 5 вопросов")
+st.markdown("*Наберите 5 верных ответов по теме. Ошибки не страшны — Чацкий даст подсказку, но вопрос не изменится, пока вы не ответите верно.*")
 
 # Инициализация состояния
 if "token" not in st.session_state:
@@ -151,8 +156,10 @@ if "current_topic_index" not in st.session_state:
     st.session_state.current_topic_index = 0
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+# Счетчик ВЕРНЫХ ответов по текущей теме (0..5)
 if "correct_count" not in st.session_state:
     st.session_state.correct_count = 0
+# Флаг: нужно ли сгенерировать первый вопрос новой темы
 if "need_first_question" not in st.session_state:
     st.session_state.need_first_question = True
 
@@ -162,7 +169,7 @@ if not st.session_state.nick:
     if st.button("Начать экзамен"):
         if nick_input.strip():
             st.session_state.nick = nick_input.strip()
-            st.session_state.chat_history.append({"role": "assistant", "content": f"Ах, {nick_input}! Добро пожаловать. Я — Чацкий. Готовы ли вы продемонстрировать свои знания русской словесности? Вас ждет суровый экзамен: 5 вопросов по каждой теме. Начнем с **«{TOPICS[0]}»**?"})
+            st.session_state.chat_history.append({"role": "assistant", "content": f"Ах, {nick_input}! Добро пожаловать. Я — Чацкий. Правило простое: 5 верных ответов по теме — и вы свободны. Ошибетесь — дам подсказку, но вопрос тот же. Начнем с темы: **«{TOPICS[0]}»**?"})
             st.session_state.need_first_question = True
             st.rerun()
 else:
@@ -172,12 +179,13 @@ else:
             if not st.session_state.token:
                 st.stop()
 
-    # Автостарт вопроса при смене темы
+    # Генерация первого вопроса при старте темы
     if st.session_state.need_first_question:
         current_topic = TOPICS[st.session_state.current_topic_index]
         with st.chat_message("assistant"):
-            with st.spinner("Чацкий формулирует вопрос..."):
-                response_text = ask_gigachat(st.session_state.token, "START_TOPIC", current_topic, 1)
+            with st.spinner("Чацкий формулирует вопрос №1..."):
+                q_num = st.session_state.correct_count + 1
+                response_text = ask_gigachat(st.session_state.token, "START_TOPIC", current_topic, q_num)
                 st.write(response_text)
                 st.session_state.chat_history.append({"role": "assistant", "content": response_text})
         st.session_state.need_first_question = False
@@ -189,7 +197,8 @@ else:
 
     # Индикатор прогресса
     current_topic_name = TOPICS[st.session_state.current_topic_index]
-    st.sidebar.info(f"📚 Тема: {current_topic_name}\n✅ Верных ответов: {st.session_state.correct_count} / {QUESTIONS_PER_TOPIC}")
+    current_q_num = st.session_state.correct_count + 1
+    st.sidebar.info(f"📚 Тема: {current_topic_name}\n❓ Текущий вопрос: {current_q_num} из {QUESTIONS_PER_TOPIC}\n✅ Верных ответов: {st.session_state.correct_count}")
 
     if prompt := st.chat_input("Ваш ответ..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
@@ -197,48 +206,69 @@ else:
             st.write(prompt)
 
         current_topic = TOPICS[st.session_state.current_topic_index]
+        # Номер вопроса, на который отвечаем сейчас (он равен correct_count + 1)
         current_q_num = st.session_state.correct_count + 1
         
         with st.chat_message("assistant"):
-            with st.spinner("Чацкий проверяет..."):
+            with st.spinner("Чацкий оценивает..."):
                 response_text = ask_gigachat(st.session_state.token, prompt, current_topic, current_q_num)
                 st.write(response_text)
                 st.session_state.chat_history.append({"role": "assistant", "content": response_text})
 
-        # АНАЛИЗ ОТВЕТА КОДОМ
+        # === АНАЛИЗ ОТВЕТА КОДОМ ===
         lower_response = response_text.lower()
-        positive_words = ["браво", "отлично", "верно", "правильно", "превосходно", "засчитано", "именно так", "хорошо", "умно", "дельно"]
-        negative_words = ["неверно", "ошибка", "попробуй еще", "снова", "не совсем", "нет", "плохо", "слабо", "пустяки", "чепуха"]
+        
+        # Слова похвалы (означают верный ответ)
+        positive_words = ["браво", "отлично", "верно", "правильно", "превосходно", "засчитано", "именно так", "хорошо", "умно", "дельно", "совершенно верно", "принято"]
+        # Слова ошибки/подсказки (означают, что нужно остаться на том же вопросе)
+        negative_words = ["неверно", "ошибка", "попробуйте снова", "еще раз", "нет", "слабо", "чепуха", "пустяки", "подсказка", "намек", "подумайте", "вспомните", "не совсем"]
         
         has_praise = any(word in lower_response for word in positive_words)
         has_negative = any(word in lower_response for word in negative_words)
         
-        # Логика: если есть похвала и нет явного отрицания -> ответ принят
-        is_answer_correct = has_praise and not has_negative
+        # Проверка: упомянул ли он следующий номер вопроса? (например, "Вопрос №2")
+        next_q_match = re.search(r'вопрос\s*№?\s*(\d+)', lower_response)
+        mentioned_next_q = False
+        if next_q_match:
+            matched_num = int(next_q_match.group(1))
+            if matched_num > current_q_num:
+                mentioned_next_q = True
 
-        if is_answer_correct:
+        # ЛОГИКА РЕШЕНИЯ:
+        # Ответ верный, если:
+        # 1. Есть похвала И нет слов ошибки/подсказки.
+        # ИЛИ
+        # 2. Бот явно перешел к следующему номеру вопроса.
+        is_correct = (has_praise and not has_negative) or mentioned_next_q
+
+        if is_correct:
+            st.success("✅ Ответ верный! +1 балл.")
             st.session_state.correct_count += 1
             
+            # Проверка: набрали ли 5 баллов?
             if st.session_state.correct_count >= QUESTIONS_PER_TOPIC:
-                st.success(f"🎉 Тема «{current_topic}» ПРОЙДЕНА! Запись в журнал...")
+                st.balloons()
+                st.success(f"🎉 Тема «{current_topic}» ПРОЙДЕНА (5/5)! Запись в журнал...")
                 success = send_to_google_sheet(st.session_state.nick, current_topic)
                 if success:
-                    st.success("✅ Оценка записана в таблицу!")
+                    st.success("✅ Оценка «1» записана в таблицу!")
                 
+                # Сброс и переход к следующей теме
                 st.session_state.current_topic_index += 1
                 st.session_state.correct_count = 0
+                st.session_state.need_first_question = True
                 
                 if st.session_state.current_topic_index < len(TOPICS):
                     next_topic = TOPICS[st.session_state.current_topic_index]
                     st.info(f"Переходим к следующей теме: **{next_topic}**.")
-                    st.session_state.need_first_question = True
                     st.rerun()
                 else:
-                    st.balloons()
-                    st.session_state.chat_history.append({"role": "assistant", "content": "🎉 Поздравляю, сударь! Вы прошли весь курс. Теперь вы истинный знаток словесности!"})
+                    st.session_state.chat_history.append({"role": "assistant", "content": "🎉 Поздравляю, сударь! Вы прошли весь курс литературы. Экзамен окончен!"})
                     st.stop()
+            else:
+                # Просто продолжаем диалог, счетчик увеличен, следующий вопрос уже задан в тексте ответа
+                st.rerun()
         else:
-            st.warning("⚠️ Ответ не зачтен. Чацкий требует более глубоких знаний!")
-            # Счетчик не меняем
-
-        st.rerun()
+            st.warning("⚠️ Ответ неверный. Балл не начислен. Чацкий дал подсказку. Ответьте снова на этот же вопрос.")
+            # Счетчик НЕ увеличиваем. Вопрос остается тем же.
+            st.rerun()

@@ -1,106 +1,47 @@
 import streamlit as st
 import requests
+import json
 import os
 import base64
-import re
+from datetime import datetime
 
 # --- НАСТРОЙКИ ---
-# ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT (обязательно с https:// и /exec)
+# ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT (обязательно с https:// и /exec в конце)
 GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV/exec"
 
-# Список тем и 5 УНИКАЛЬНЫХ АСПЕКТОВ для каждой (чтобы вопросы не повторялись)
-# Структура: "Название темы": ["Аспект 1", "Аспект 2", "Аспект 3", "Аспект 4", "Аспект 5"]
-TOPICS_DATA = {
-    "Преступление и наказание": [
-        "теория Раскольникова о 'тварях дрожащих и право имеющих'",
-        "образ Сони Мармеладовой и её роль в спасении Раскольникова",
-        "символика сна о моровой язве в эпилоге романа",
-        "мотивы преступления Раскольникова: нужда, гордыня или эксперимент?",
-        "образ Петербурга как душного, давящего пространства"
-    ],
-    "Герой нашего времени": [
-        "психологический портрет Печорина и его внутренний конфликт",
-        "история любви Печорина и Бэлы: эгоизм или судьба?",
-        "роль судьбы и фатализма в жизни Грушницкого и Печорина",
-        "анализ главы 'Княжна Мери': дуэль и интриги",
-        "феномен 'лишнего человека' на примере Печорина"
-    ],
-    "Горе от ума": [
-        "конфликт Чацкого с фамусовским обществом: век нынешний и век минувший",
-        "образ Софьи Фамусовой: жертва или соучастница?",
-        "монологи Чацкого как выражение идей декабристов",
-        "сплетня о сумасшествии Чацкого: почему она так быстро распространилась?",
-        "проблема ума и безумия в комедии"
-    ],
-    "Старуха Изергиль": [
-        "легенда о Данко: смысл подвига и отношение людей к герою",
-        "легенда о Ларре: наказание гордыней и одиночеством",
-        "контраст между образами Данко, Ларры и самой Изергиль",
-        "романтизм произведения: исключительные герои в исключительных обстоятельствах",
-        "проблема смысла жизни в рассказе"
-    ],
-    "Обломов": [
-        "понятие 'обломовщины' как социального и нравственного явления",
-        "сон Обломова: ключ к пониманию характера героя",
-        "сравнение образов Обломова и Штольца: два пути жизни",
-        "любовная линия: почему отношения с Ольгой Ильинской не сложились?",
-        "роль Захара в жизни Ильи Ильича: зеркало хозяина"
-    ],
-    "Мертвые души": [
-        "образ Чичикова: кто он, авантюрист или герой времени?",
-        "галерея помещиков: Манилов, Коробочка, Ноздрев, Собакевич, Плюшкин (общая характеристика)",
-        "смысл названия поэмы: кто такие 'мертвые души'?",
-        "образ России-тройки в лирическом отступлении",
-        "система чиновников города N: взяточничество и казнокрадство"
-    ],
-    "Евгений Онегин": [
-        "эволюция образа Онегина: от скуки до любви",
-        "образ Татьяны Лариной: 'милый идеал' Пушкина",
-        "письмо Татьяны и ответ Онегина: анализ чувств и морали",
-        "быт и нравы дворянской усадьбы и Петербурга",
-        "финал романа: почему Онегин отвергнут?"
-    ],
-    "Капитанская дочка": [
-        "образ Емельяна Пугачева: жестокий бунтовщик или справедливый лидер?",
-        "нравственный выбор Петра Гринева: честь и долг",
-        "образ Маши Мироновой: тихая героиня",
-        "тема милосердия в повести (сцена с зайцем, помилование Гринева)",
-        "историческая правда и художественный вымысел в произведении"
-    ],
-    "Вишневый сад": [
-        "символика вишневого сада: прошлое, настоящее и будущее",
-        "образ Раневской: непрактичность и детская непосредственность",
-        "Лопахин: деловой человек с душой поэта или хищник?",
-        "образ Пети Трофимова и тема будущего России",
-        "звуковой ряд пьесы: звук лопнувшей струны и стук топора"
-    ],
-    "Тарас Бульба": [
-        "образ Тараса Бульбы: воплощение народного характера",
-        "трагедия отца и сыновей: Остап и Андрий",
-        "товарищество как высшая ценность для запорожцев",
-        "описание битв и воинской доблести",
-        "патриотизм и жестокость в повести"
-    ]
-}
+# Список тем (книг)
+TOPICS = [
+    "Преступление и наказание",
+    "Герой нашего времени",
+    "Горе от ума",
+    "Старуха Изергиль",
+    "Обломов",
+    "Мертвые души",
+    "Евгений Онегин",
+    "Капитанская дочка",
+    "Вишневый сад",
+    "Тарас Бульба"
+]
 
-TOPIC_NAMES = list(TOPICS_DATA.keys())
-MAX_SCORE = 5
-
+# Ключи API (берутся из переменных окружения Railway)
 GIGACHAT_CLIENT_ID = os.getenv("GIGACHAT_CLIENT_ID")
 GIGACHAT_CLIENT_SECRET = os.getenv("GIGACHAT_CLIENT_SECRET")
 
 # --- ФУНКЦИИ ---
 
 def get_gigachat_token():
+    """Получает токен доступа к GigaChat"""
     if not GIGACHAT_CLIENT_ID or not GIGACHAT_CLIENT_SECRET:
-        st.error("❌ Ошибка: Ключи API не найдены!")
+        st.error("❌ Ошибка: Ключи API не найдены в настройках Railway!")
         return None
+    
     url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
     credentials = f"{GIGACHAT_CLIENT_ID}:{GIGACHAT_CLIENT_SECRET}"
+    
     try:
         encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
     except Exception as e:
-        st.error(f"Ошибка кодирования: {e}")
+        st.error(f"Ошибка кодирования ключей: {e}")
         return None
     
     headers = {
@@ -108,6 +49,7 @@ def get_gigachat_token():
         "RqUID": "00000000-0000-0000-0000-000000000000",
         "Authorization": f"Basic {encoded_credentials}"
     }
+    
     data = {"scope": "GIGACHAT_API_PERS"}
     
     try:
@@ -115,76 +57,39 @@ def get_gigachat_token():
         if response.status_code == 200:
             return response.json().get("access_token")
         else:
-            st.error(f"Ошибка токена: {response.text}")
+            st.error(f"❌ Сбер отверг ключи: {response.text}")
             return None
     except Exception as e:
-        st.error(f"Ошибка соединения: {e}")
+        st.error(f"❌ Ошибка соединения: {e}")
         return None
 
-def ask_gigachat(token, user_message, current_topic, current_aspect, current_score, is_hint_mode=False):
-    """
-    current_aspect: конкретная тема вопроса (например, 'образ Сони'), чтобы вопросы были разными.
-    """
+def ask_gigachat(token, user_message, context=""):
+    """Отправляет запрос к GigaChat и получает ответ"""
+    if not token:
+        return "Ошибка авторизации."
+
     url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {token}"
     }
     
-    CHATSKY_PERSONA = """
-    Ты — Александр Андреевич Чацкий. Строгий учитель литературы.
-    ТВОЙ СТИЛЬ: Эмоциональный, саркастичный, лексика XIX века («сударь», «помилуйте», цитаты из «Горя от ума»).
-    ЗАПРЕТЫ: Никаких разговоров о погоде, мемах, математике. Только литература, экзамены, сочинения!
-    
-    ТВОЯ ЗАДАЧА СЕЙЧАС:
-    Тема произведения: "{topic}".
-    Конкретный аспект для вопроса №{q_num}: "{aspect}".
-    
-    ПРАВИЛА:
-    1. Сформулируй ВОПРОС строго по аспекту "{aspect}". Не спрашивай ни о чем другом.
-    2. Если ответ ученика ВЕРНЫЙ: Похвали ярко. Если это был 5-й вопрос — поздравь с окончанием темы. Если нет — скажи, что переходим к следующему аспекту (но сам следующий вопрос задавать не надо, это сделает система).
-    3. Если ответ НЕВЕРНЫЙ: Дай ироничную подсказку, связанную с аспектом "{aspect}", и потребуй ответить снова. Не переходи к другому аспекту!
-    """
-
-    q_num = current_score + 1
-    
-    system_prompt = CHATSKY_PERSONA.format(
-        topic=current_topic,
-        aspect=current_aspect,
-        q_num=q_num
+    system_prompt = (
+        "Ты — Александр Андреевич Чацкий. Ты строгий, но справедливый учитель. "
+        "Твоя задача: проверять знания ученика по русской классике. "
+        "1. Если ответ ученика ВЕРНЫЙ: Похвали его (используй слова 'Браво', 'Отлично', 'Превосходно', 'Засчитано'). "
+        "   После похвалы сразу задай вопрос по СЛЕДУЮЩЕЙ теме из списка или поздравь с окончанием. "
+        "2. Если ответ НЕВЕРНЫЙ или короткий: Покритикуй с иронией, объясни ошибку и попроси ответить еще раз по ЭТОЙ ЖЕ теме. "
+        "Не пиши слишком длинно. Будь живым и эмоциональным."
     )
-
-    if user_message == "START_QUESTION":
-        full_prompt = (
-            system_prompt + 
-            "\n\nСИТУАЦИЯ: Начало вопроса. Задай свой вопрос ученику по аспекту '{aspect}' в стиле Чацкого.".format(aspect=current_aspect)
-        )
-        user_content = "Задай вопрос."
-    else:
-        if is_hint_mode:
-            instruction = (
-                f"Ученик ответил неверно. Аспект все тот же: '{current_aspect}'. "
-                "НЕ меняй тему вопроса. Дай подсказку именно по этому аспекту. "
-                "Потребуй ответа снова."
-            )
-        else:
-            instruction = (
-                f"Ученик ответил на вопрос по аспекту '{current_aspect}'. Оцени ответ.\n"
-                "- Если ВЕРНО: Похвали. Скажи, что вопрос закрыт.\n"
-                "- Если НЕВЕРНО: Дай подсказку по этому аспекту и требуй ответа снова."
-            )
-        
-        full_prompt = system_prompt + f"\n\nСИТУАЦИЯ: {instruction}\nОтвет ученика: {user_message}"
-        user_content = "Оцени ответ."
-
+    
     payload = {
         "model": "GigaChat",
         "messages": [
-            {"role": "system", "content": full_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"{context}\nУченик говорит: {user_message}"}
         ],
-        "temperature": 0.7,
-        "top_p": 0.9
+        "temperature": 0.7
     }
     
     try:
@@ -192,149 +97,105 @@ def ask_gigachat(token, user_message, current_topic, current_aspect, current_sco
         if response.status_code == 200:
             return response.json()["choices"][0]["message"]["content"]
         else:
-            return f"Ошибка связи: {response.text}"
+            return f"Ошибка GigaChat: {response.text}"
     except Exception as e:
-        return f"Ошибка: {e}"
+        return f"Ошибка соединения: {e}"
 
-def update_google_sheet_score(nick, topic, new_score):
+def send_to_google_sheet(nick, topic):
+    """Отправляет данные о пройденной теме в Google Таблицу"""
     if not GOOGLE_SCRIPT_URL or "https://" not in GOOGLE_SCRIPT_URL:
         return False
-    payload = {"nick": nick, "topic": topic, "score": new_score}
+        
+    payload = {"nick": nick, "topic": topic, "status": 1}
+    
     try:
         response = requests.post(GOOGLE_SCRIPT_URL, json=payload)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
-# --- ИНТЕРФЕЙС ---
+# --- ИНТЕРФЕЙС STREAMLIT ---
 
-st.set_page_config(page_title="Экзамен с Чацким", page_icon="🎩")
-st.title("🎩 Литературный экзамен: 5 уникальных вопросов")
-st.markdown("*5 тем → 5 разных аспектов в каждой. Наберите 5 баллов для перехода.*")
+st.set_page_config(page_title="Урок с Чацким", page_icon="🎩")
+st.title("🎩 Литературный экзамен с Чацким")
+st.markdown("*«Свежо предание, а верится с трудом...»*)")
 
-# СОСТОЯНИЕ
-if "token" not in st.session_state: st.session_state.token = None
-if "nick" not in st.session_state: st.session_state.nick = ""
-if "current_topic_index" not in st.session_state: st.session_state.current_topic_index = 0
-if "chat_history" not in st.session_state: st.session_state.chat_history = []
-if "current_score" not in st.session_state: st.session_state.current_score = 0
-if "bot_state" not in st.session_state: st.session_state.bot_state = 'GREET' # GREET, ASK_Q, WAIT, HINT
+# Инициализация состояния
+if "token" not in st.session_state:
+    st.session_state.token = None
+if "nick" not in st.session_state:
+    st.session_state.nick = ""
+if "current_topic_index" not in st.session_state:
+    st.session_state.current_topic_index = 0
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+# Флаг, чтобы не засчитывать тему дважды за один ответ
+if "last_processed_index" not in st.session_state:
+    st.session_state.last_processed_index = -1
 
+# Шаг 1: Вход
 if not st.session_state.nick:
-    nick_input = st.text_input("Как вас зовут?", placeholder="Имя")
-    if st.button("Начать"):
+    nick_input = st.text_input("Как вас зовут?", placeholder="Введите никнейм")
+    if st.button("Начать экзамен"):
         if nick_input.strip():
             st.session_state.nick = nick_input.strip()
-            st.session_state.bot_state = 'GREET'
+            st.session_state.chat_history.append({"role": "assistant", "content": f"Ах, {nick_input}! Добро пожаловать. Я — Чацкий. Готовы ли вы продемонстрировать свои знания? Начнем с первой темы."})
             st.rerun()
 else:
+    # Получение токена
     if not st.session_state.token:
-        with st.spinner("Связь со Сбером..."):
+        with st.spinner("Чацкий связывается со Сбером..."):
             st.session_state.token = get_gigachat_token()
-            if not st.session_state.token: st.stop()
+            if not st.session_state.token:
+                st.stop()
 
-    # Автоматическая генерация вопросов
-    if st.session_state.bot_state in ['GREET', 'ASK_Q']:
-        current_topic = TOPIC_NAMES[st.session_state.current_topic_index]
-        current_score = st.session_state.current_score
-        
-        # Получаем уникальный аспект для текущего вопроса (индекс равен текущему счету)
-        aspects_list = TOPICS_DATA[current_topic]
-        current_aspect = aspects_list[current_score] # 0 -> аспект 1, 1 -> аспект 2 и т.д.
-        
-        msg_type = "START_GREETING" if st.session_state.bot_state == 'GREET' else "START_QUESTION"
-        
-        # Для приветствия нужен особый текст, но мы используем ту же функцию, передавая первый аспект
-        if st.session_state.bot_state == 'GREET':
-             # Специальный хак для первого приветствия, чтобы он представился
-             with st.chat_message("assistant"):
-                 st.write(f"Ах, {st.session_state.nick}! Я — Чацкий. Готовы к испытанию? Мы пройдемся по 5 уникальным аспектам темы **«{current_topic}»**. Ошибаться можно, но я буду давать подсказки, пока вы не ответите верно. Начнем!")
-                 st.session_state.chat_history.append({"role": "assistant", "content": f"Ах, {st.session_state.nick}! Я — Чацкий..."}) # Краткая запись
-                 # Сразу переходим к генерации первого вопроса
-                 st.session_state.bot_state = 'ASK_Q'
-                 st.rerun()
-        
-        # Генерация вопроса по аспекту
-        with st.chat_message("assistant"):
-            with st.spinner("Чацкий формулирует вопрос..."):
-                # Передаем аспект, чтобы вопрос был уникальным
-                response_text = ask_gigachat(st.session_state.token, "START_QUESTION", current_topic, current_aspect, current_score)
-                st.write(response_text)
-                st.session_state.chat_history.append({"role": "assistant", "content": response_text})
-        
-        st.session_state.bot_state = 'WAIT_ANSWER'
-        st.rerun()
-
-    # Отображение чата
+    # Чат
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.write(message["content"])
-
-    # Прогресс
-    current_topic_name = TOPIC_NAMES[st.session_state.current_topic_index]
-    aspects_list = TOPICS_DATA[current_topic_name]
-    current_aspect_name = aspects_list[st.session_state.current_score] if st.session_state.current_score < 5 else "Завершено"
-    
-    st.sidebar.info(
-        f"📚 **Тема:** {current_topic_name}\n"
-        f"🎯 **Аспект вопроса:** {current_aspect_name}\n"
-        f"💯 **Баллы:** {st.session_state.current_score} / {MAX_SCORE}"
-    )
 
     if prompt := st.chat_input("Ваш ответ..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
 
-        current_topic = TOPIC_NAMES[st.session_state.current_topic_index]
-        current_score = st.session_state.current_score
-        current_aspect = aspects_list[current_score]
-        
-        is_hint = (st.session_state.bot_state == 'HINT_MODE')
+        current_topic = TOPICS[st.session_state.current_topic_index]
+        context = f"Текущая тема: {current_topic}."
         
         with st.chat_message("assistant"):
-            with st.spinner("Чацкий оценивает..."):
-                response_text = ask_gigachat(st.session_state.token, prompt, current_topic, current_aspect, current_score, is_hint_mode=is_hint)
+            with st.spinner("Чацкий размышляет..."):
+                response_text = ask_gigachat(st.session_state.token, prompt, context)
                 st.write(response_text)
                 st.session_state.chat_history.append({"role": "assistant", "content": response_text})
 
-        # Анализ
-        lower_response = response_text.lower()
-        positive_words = ["браво", "отлично", "верно", "правильно", "превосходно", "засчитано", "именно так", "хорошо", "умно", "дельно", "принято"]
-        negative_words = ["неверно", "ошибка", "попробуйте снова", "еще раз", "нет", "слабо", "чепуха", "пустяки", "подсказка", "намек", "подумайте", "вспомните", "не совсем"]
+        # --- УМНАЯ ПРОВЕРКА ---
+        # Мы засчитываем тему ТОЛЬКО если:
+        # 1. В ответе есть явная похвала (Браво, Отлично, Засчитано).
+        # 2. В ответе НЕТ вопросительного знака (?) сразу после ключевых слов сомнений.
+        # 3. Мы еще не засчитывали этот конкретный шаг (защита от дублей).
         
-        has_praise = any(word in lower_response for word in positive_words)
-        has_negative = any(word in lower_response for word in negative_words)
+        positive_markers = ["браво", "отлично", "превосходно", "засчитано", "принято", "верно, следующая"]
+        is_praise = any(marker in response_text.lower() for marker in positive_markers)
         
-        is_correct = has_praise and not has_negative
+        # Важная проверка: если это вопрос ("Верно ли?"), то не засчитываем.
+        # Простая эвристика: если есть "?" и нет явного "Засчитано/Браво", то скорее всего это вопрос.
+        is_question = "?" in response_text and not any(word in response_text.lower() for word in ["засчитано", "браво", "принято"])
 
-        if is_correct:
-            new_score = current_score + 1
-            st.success(f"✅ Верно! +1 балл. Всего: {new_score}")
+        if is_praise and not is_question and st.session_state.current_topic_index != st.session_state.last_processed_index:
+            success = send_to_google_sheet(st.session_state.nick, current_topic)
+            if success:
+                st.success(f"✅ Тема «{current_topic}» зачтена и записана в журнал!")
             
-            if update_google_sheet_score(st.session_state.nick, current_topic, new_score):
-                st.toast(f"Балл ({new_score}) записан!")
+            # Переход к следующей теме
+            st.session_state.current_topic_index += 1
+            st.session_state.last_processed_index = st.session_state.current_topic_index # Запоминаем, что шагнули дальше
             
-            st.session_state.current_score = new_score
-
-            if new_score >= MAX_SCORE:
-                st.balloons()
-                st.success(f"🎉 Тема пройдена на 5 баллов!")
-                st.session_state.chat_history.append({"role": "assistant", "content": "Браво! Тема освоена полностью. Переходим к следующей книге!"})
-                
-                if st.session_state.current_topic_index < len(TOPIC_NAMES) - 1:
-                    st.session_state.current_topic_index += 1
-                    st.session_state.current_score = 0
-                    st.session_state.bot_state = 'GREET' # Приветствие новой темы
-                    st.rerun()
-                else:
-                    st.session_state.chat_history.append({"role": "assistant", "content": "🎉 Курс окончен! Вы великий знаток!"})
-                    st.stop()
+            if st.session_state.current_topic_index < len(TOPICS):
+                next_topic = TOPICS[st.session_state.current_topic_index]
+                # Добавляем системное сообщение о переходе, чтобы пользователь видел новую тему
+                transition_msg = f"---\n**Следующая тема:** {next_topic}. Что вы можете о ней сказать?"
+                st.session_state.chat_history.append({"role": "assistant", "content": transition_msg})
             else:
-                # Следующий вопрос (новый аспект)
-                st.session_state.bot_state = 'ASK_Q'
-                st.rerun()
-        else:
-            st.warning("⚠️ Неверно. Балл не начислен. Подсказка дана.")
-            st.session_state.bot_state = 'HINT_MODE'
+                st.session_state.chat_history.append({"role": "assistant", "content": "🎉 Поздравляю! Курс окончен."})
+            
             st.rerun()

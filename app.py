@@ -4,8 +4,8 @@ import os
 import base64
 
 # --- НАСТРОЙКИ ---
-# ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwrjnUp0eGnK4yJRxep3hjLMRCg-xA-EN-SLwYhA9QQaPdEJE7PbYQayMDnKJAITHxV/exec"
+# ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ НА GOOGLE SCRIPT (обязательно с https:// и /exec)
+GOOGLE_SCRIPT_URL = "ВАША_ССЫЛКА_НА_GOOGLE_SCRIPT"
 
 TOPICS = [
     "Преступление и наказание",
@@ -56,7 +56,7 @@ def get_gigachat_token():
         st.error(f"Ошибка соединения: {e}")
         return None
 
-def ask_gigachat(token, user_message, current_topic, question_number, is_correct_answer=False):
+def ask_gigachat(token, user_message, current_topic, question_number):
     url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
@@ -82,7 +82,7 @@ def ask_gigachat(token, user_message, current_topic, question_number, is_correct
     
     СТРОГИЕ ОГРАНИЧЕНИЯ:
     - НИКОГДА не отвечай на вопросы не по теме литературы (математика, погода, сплетни, современные мемы). 
-      Если ученик спрашивает ерунду, возмутился: «Что за новости? Какие такие пустяки? Мы здесь литературу разбираем, сударь!». Верни разговор к теме экзамена.
+      Если ученик спрашивает ерунду, возмутись: «Что за новости? Какие такие пустяки? Мы здесь литературу разбираем, сударь!». Верни разговор к теме экзамена.
     - НИКОГДА не переходи к следующей теме сам, пока не задано ровно 5 вопросов по текущей.
     - НИКОГДА не будь слишком мягким. Ты Чацкий, а не нянька.
     """
@@ -90,19 +90,19 @@ def ask_gigachat(token, user_message, current_topic, question_number, is_correct
     # Формирование конкретного запроса
     if user_message == "START_TOPIC":
         system_prompt = (
-            f"{CHATSKY_PERSONA}\n\n"
-            f"СЕЙЧАС: Начало экзамена. Тема: '{current_topic}'. Вопрос №1 из {QUESTIONS_PER_TOPIC}. "
+            CHATSKY_PERSONA + 
+            f"\n\nСЕЙЧАС: Начало экзамена. Тема: '{current_topic}'. Вопрос №1 из {QUESTIONS_PER_TOPIC}. "
             "Задай первый вопрос по этой теме. Начни с приветствия в стиле Чацкого и сразу переходи к делу."
         )
         user_content = "Начни экзамен."
     else:
         next_q = question_number + 1 if question_number < QUESTIONS_PER_TOPIC else 5
         system_prompt = (
-            f"{CHATSKY_PERSONA}\n\n"
-            f"СЕЙЧАС: Тема '{current_topic}'. Текущий вопрос №{question_number} из {QUESTIONS_PER_TOPIC}. "
-            "Ответ ученика ниже. Оцени его."
-            "Если ответ ВЕРНЫЙ: Похвали (в стиле Чацкого). Затем задай СЛЕДУЮЩИЙ вопрос №{next_q} по этой теме. "
-            "Если это был вопрос №5: Поздравь с прохождением темы, но скажи, что впереди еще много книг.".format(next_q=next_q)
+            CHATSKY_PERSONA + 
+            f"\n\nСЕЙЧАС: Тема '{current_topic}'. Текущий вопрос №{question_number} из {QUESTIONS_PER_TOPIC}. "
+            "Ответ ученика ниже. Оцени его. "
+            f"Если ответ ВЕРНЫЙ: Похвали (в стиле Чацкого). Затем задай СЛЕДУЮЩИЙ вопрос №{next_q} по этой теме. "
+            "Если это был вопрос №5: Поздравь с прохождением темы, но скажи, что впереди еще много книг. "
             "Если ответ НЕВЕРНЫЙ или не по теме: Отчитай ученика, используй сарказм. Если вопрос не по литературе — гневно отвергни его и верни к теме '{current_topic}'. Не задавай новый вопрос, пока не получишь верный ответ на текущий."
         )
         user_content = f"Ответ ученика: {user_message}"
@@ -113,7 +113,7 @@ def ask_gigachat(token, user_message, current_topic, question_number, is_correct
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content}
         ],
-        "temperature": 0.7, # Немного креативности для стиля
+        "temperature": 0.7,
         "top_p": 0.9
     }
     
